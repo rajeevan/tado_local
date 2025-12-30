@@ -1,5 +1,6 @@
+import asyncio
 import logging
-from homeassistant.components.climate import ClimateEntity, ClimateEntityFeature, HVACMode
+from homeassistant.components.climate import ClimateEntity, ClimateEntityFeature, HVACMode, HVACAction
 from homeassistant.const import UnitOfTemperature
 from .const import DOMAIN
 
@@ -45,33 +46,66 @@ class TadoZoneThermostat(ClimateEntity):
 
     @property
     def hvac_mode(self):
-        if not self.data: return HVACMode.OFF
+        """Return the current operation mode (Heat vs Off)."""
+        if not self.data: 
+            return HVACMode.OFF
+        # Check if the heating is logically enabled in the API
         mode = self.data.get("state", {}).get("mode")
         return HVACMode.HEAT if mode == 1 else HVACMode.OFF
+    @property
+    def hvac_action(self):
+        """Return the current running action (Heating vs Idle)."""
+        if self.hvac_mode == HVACMode.OFF:
+            return HVACAction.OFF
+        
+        # Check the API for the actual heating percentage or request
+        # In the AmpScm/TadoLocal API, this is usually 'heating_power' or similar
+        state = self.data.get("state", {})
+        heating_request = state.get("cur_heating", 0)  # Value 0-100
+        
+        if heating_request > 0:
+            return HVACAction.HEATING
+        return HVACAction.IDLE
 
     async def async_set_hvac_mode(self, hvac_mode):
+        """Set new target hvac mode."""
         enabled = "true" if hvac_mode == HVACMode.HEAT else "false"
-        
-        # FIX: Get the zone_id from the data dictionary, not the thermostat_id
         zone_id = self.data.get("zone_id")
-        if not zone_id:
-            _LOGGER.error("Cannot set mode: No zone_id found for %s", self._attr_name)
-            return
-
+        
         url = f"{self.coordinator.base_url}/zones/{zone_id}/set?heating_enabled={enabled}"
-        await self._send_command(url)
+        
+        async with self.coordinator.session.post(
+            url, 
+            headers={"Authorization": f"Bearer {self.coordinator.token}"}
+        ) as resp:
+            if resp.status == 100:
+                await asyncio.sleep(1)
+                await self.coordinator.async_request_refresh()
+                
+                # CRITICAL: Manually trigger the UI to re-read the state
+                self.async_write_ha_state() 
+            else:
+                _LOGGER.error("Failed to set HVAC mode: %s", resp.status)
 
     async def async_set_temperature(self, **kwargs):
+        """Set new target temperature."""
         temp = kwargs.get("temperature")
-        
-        # FIX: Get the zone_id from the data dictionary
         zone_id = self.data.get("zone_id")
-        if not zone_id:
-            _LOGGER.error("Cannot set temperature: No zone_id found for %s", self._attr_name)
-            return
-
+        
         url = f"{self.coordinator.base_url}/zones/{zone_id}/set?temperature={temp}"
-        await self._send_command(url)
+        
+        async with self.coordinator.session.post(
+            url, 
+            headers={"Authorization": f"Bearer {self.coordinator.token}"}
+        ) as resp:
+            if resp.status == 100:
+                await asyncio.sleep(1)
+                await self.coordinator.async_request_refresh()
+                
+                # CRITICAL: Update UI state immediately
+                self.async_write_ha_state() 
+            else:
+                _LOGGER.error("Failed to set temperature: %s", resp.status)
 
     async def _send_command(self, url):
         headers = {"Authorization": f"Bearer {self.coordinator.token}"}
