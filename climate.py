@@ -51,13 +51,26 @@ class TadoZoneThermostat(ClimateEntity):
 
     async def async_set_hvac_mode(self, hvac_mode):
         enabled = "true" if hvac_mode == HVACMode.HEAT else "false"
-        # Using the correct endpoint from openapi.json
-        url = f"{self.coordinator.base_url}/thermostats/{self._id}/set?heating_enabled={enabled}"
+        
+        # FIX: Get the zone_id from the data dictionary, not the thermostat_id
+        zone_id = self.data.get("zone_id")
+        if not zone_id:
+            _LOGGER.error("Cannot set mode: No zone_id found for %s", self._attr_name)
+            return
+
+        url = f"{self.coordinator.base_url}/zones/{zone_id}/set?heating_enabled={enabled}"
         await self._send_command(url)
 
     async def async_set_temperature(self, **kwargs):
         temp = kwargs.get("temperature")
-        url = f"{self.coordinator.base_url}/thermostats/{self._id}/set?temperature={temp}"
+        
+        # FIX: Get the zone_id from the data dictionary
+        zone_id = self.data.get("zone_id")
+        if not zone_id:
+            _LOGGER.error("Cannot set temperature: No zone_id found for %s", self._attr_name)
+            return
+
+        url = f"{self.coordinator.base_url}/zones/{zone_id}/set?temperature={temp}"
         await self._send_command(url)
 
     async def _send_command(self, url):

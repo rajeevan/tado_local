@@ -4,9 +4,10 @@
 # What works
 - I'm able to integrate with **[AmpScm/TadoLocal](https://github.com/AmpScm/TadoLocal)** service. 
 - All my zones are showing
+- Adjusting temperature working on correct zones
 
 # Not working / Wrong
-- Setting temperature changing the wrong zone!!!! Need more work on this
+- HVAC mode toggleing to off does turn off the zone, but status in HA shows as Heat and can't change back to Heat!
 
 # Tado Local for Home Assistant (HACS)
 
