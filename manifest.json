@@ -1,0 +1,10 @@
+{
+  "domain": "tado_local",
+  "name": "Tado Local",
+  "documentation": "https://github.com/rajeevan/tado_local",
+  "dependencies": [],
+  "codeowners": ["@rajeevan"],
+  "config_flow": true,
+  "iot_class": "local_polling",
+  "version": "0.0.1"
+}
