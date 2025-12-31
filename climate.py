@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.components.climate import ClimateEntity, ClimateEntityFeature, HVACMode, HVACAction
 from homeassistant.const import UnitOfTemperature
 from .const import DOMAIN
@@ -16,8 +17,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     async_add_entities([TadoZoneThermostat(coordinator, zone) for zone in coordinator.data])
 
-class TadoZoneThermostat(ClimateEntity):
+class TadoZoneThermostat(CoordinatorEntity, ClimateEntity):
     def __init__(self, coordinator, zone):
+        """Pass the coordinator to the parent class."""
+        super().__init__(coordinator)  # This is the "Listener"
         self.coordinator = coordinator
         # Based on openapi.json, we use thermostat_id and name
         self._id = zone.get("thermostat_id") or zone.get("zone_id")
