@@ -28,7 +28,11 @@ class TadoZoneThermostat(CoordinatorEntity, ClimateEntity):
         self._attr_unique_id = f"tado_local_therm_{self._id}"
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT, HVACMode.AUTO]
-        self._attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
+        self._attr_supported_features = (
+            ClimateEntityFeature.TARGET_TEMPERATURE
+            | ClimateEntityFeature.TURN_ON
+            | ClimateEntityFeature.TURN_OFF
+        )
 
     @property
     def data(self):
@@ -58,8 +62,8 @@ class TadoZoneThermostat(CoordinatorEntity, ClimateEntity):
         heat_request = state.get("cur_heating", 0) > 0
         mode = state.get("mode", 0)
 
-        if not heat_request and mode == 1:
-            return HVACMode.AUTO
+        # if not heat_request and mode == 1:
+        #     return HVACMode.HEAT
         return HVACMode.HEAT if mode == 1 else HVACMode.OFF
 
     @property
@@ -95,6 +99,10 @@ class TadoZoneThermostat(CoordinatorEntity, ClimateEntity):
         ) as resp:
             if resp.status != 200:
                 _LOGGER.error("Failed to set HVAC mode: %s", resp.status)
+            else:
+                await asyncio.sleep(1)
+                await self.coordinator.async_request_refresh()
+                self.async_write_ha_state()
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
@@ -109,16 +117,28 @@ class TadoZoneThermostat(CoordinatorEntity, ClimateEntity):
         ) as resp:
             if resp.status != 100:
                 _LOGGER.error("Failed to set temperature: %s", resp.status)
+            else:
+                await asyncio.sleep(1)
+                await self.coordinator.async_request_refresh()
+                self.async_write_ha_state()
+
+    async def async_turn_on(self):
+        """Turn the entity on."""
+        await self.async_set_hvac_mode(HVACMode.AUTO)
+
+    async def async_turn_off(self):
+        """Turn the entity off."""
+        await self.async_set_hvac_mode(HVACMode.OFF)
 
     async def _send_command(self, url):
         headers = {"Authorization": f"Bearer {self.coordinator.token}"}
         async with self.coordinator.session.post(url, headers=headers) as resp:
             if resp.status == 200:
                 # # Wait for hardware to process
-                # await asyncio.sleep(2)
+                await asyncio.sleep(1)
                 # # Force the coordinator to fetch the NEW data from the API
-                # await self.coordinator.async_request_refresh()
-                # # MANDATORY: Tell HA to re-run the 'hvac_mode' property logic
+                await self.coordinator.async_request_refresh()
+                # MANDATORY: Tell HA to re-run the 'hvac_mode' property logic
                 self.async_write_ha_state()
             else:
                 _LOGGER.error("Failed to send command to %s: Status %s", url, resp.status)
