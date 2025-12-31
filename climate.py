@@ -24,7 +24,7 @@ class TadoZoneThermostat(ClimateEntity):
         self._attr_name = zone.get("name") or zone.get("zone_name")
         self._attr_unique_id = f"tado_local_therm_{self._id}"
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
-        self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
+        self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT, HVACMode.AUTO]
         self._attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
 
     @property
@@ -46,12 +46,19 @@ class TadoZoneThermostat(ClimateEntity):
 
     @property
     def hvac_mode(self):
-        """Return the current operation mode (Heat vs Off)."""
-        if not self.data: 
+        """Return current operation mode."""
+        if not self.data:
             return HVACMode.OFF
-        # Check if the heating is logically enabled in the API
-        mode = self.data.get("state", {}).get("mode")
+        
+        state = self.data.get("state", {})
+        # AmpScm/TadoLocal reports cur_heating 0/1
+        heat_request = state.get("cur_heating", 0) > 0
+        mode = state.get("mode", 0)
+
+        if not heat_request and mode == 1:
+            return HVACMode.AUTO
         return HVACMode.HEAT if mode == 1 else HVACMode.OFF
+
     @property
     def hvac_action(self):
         """Return the current running action (Heating vs Idle)."""
@@ -69,22 +76,21 @@ class TadoZoneThermostat(ClimateEntity):
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Set new target hvac mode."""
-        enabled = "true" if hvac_mode == HVACMode.HEAT else "false"
         zone_id = self.data.get("zone_id")
         
-        url = f"{self.coordinator.base_url}/zones/{zone_id}/set?heating_enabled={enabled}"
-        
+        if hvac_mode == HVACMode.AUTO:
+            # Special command for AmpScm/TadoLocal to resume Tado schedule
+            url = f"{self.coordinator.base_url}/zones/{zone_id}/set?temperature=-1&heating_enabled=true"
+        elif hvac_mode == HVACMode.HEAT:
+            url = f"{self.coordinator.base_url}/zones/{zone_id}/set?heating_enabled=true"
+        else: # HVACMode.OFF
+            url = f"{self.coordinator.base_url}/zones/{zone_id}/set?heating_enabled=false"
+
         async with self.coordinator.session.post(
             url, 
             headers={"Authorization": f"Bearer {self.coordinator.token}"}
         ) as resp:
-            if resp.status == 100:
-                await asyncio.sleep(1)
-                await self.coordinator.async_request_refresh()
-                
-                # CRITICAL: Manually trigger the UI to re-read the state
-                self.async_write_ha_state() 
-            else:
+            if resp.status != 200:
                 _LOGGER.error("Failed to set HVAC mode: %s", resp.status)
 
     async def async_set_temperature(self, **kwargs):
@@ -98,19 +104,18 @@ class TadoZoneThermostat(ClimateEntity):
             url, 
             headers={"Authorization": f"Bearer {self.coordinator.token}"}
         ) as resp:
-            if resp.status == 100:
-                await asyncio.sleep(1)
-                await self.coordinator.async_request_refresh()
-                
-                # CRITICAL: Update UI state immediately
-                self.async_write_ha_state() 
-            else:
+            if resp.status != 100:
                 _LOGGER.error("Failed to set temperature: %s", resp.status)
 
     async def _send_command(self, url):
         headers = {"Authorization": f"Bearer {self.coordinator.token}"}
         async with self.coordinator.session.post(url, headers=headers) as resp:
             if resp.status == 200:
-                await self.coordinator.async_request_refresh()
+                # # Wait for hardware to process
+                # await asyncio.sleep(2)
+                # # Force the coordinator to fetch the NEW data from the API
+                # await self.coordinator.async_request_refresh()
+                # # MANDATORY: Tell HA to re-run the 'hvac_mode' property logic
+                self.async_write_ha_state()
             else:
                 _LOGGER.error("Failed to send command to %s: Status %s", url, resp.status)
