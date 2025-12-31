@@ -1,14 +1,3 @@
-> This is coded by AI by using the API docs and I have tested this with my local HomeAssistant version 2025.12.5. 
-> I'm not a Python developer! Take it with a grain of salt.. 
-
-# What works
-- I'm able to integrate with **[AmpScm/TadoLocal](https://github.com/AmpScm/TadoLocal)** service. 
-- All my zones are showing
-- Adjusting temperature working on correct zones
-
-# Not working / Wrong
-- HVAC mode toggleing to off does turn off the zone, but status in HA shows as Heat and can't change back to Heat!
-
 # Tado Local for Home Assistant (HACS)
 
 This integration provides a Home Assistant interface for the **[AmpScm/TadoLocal](https://github.com/AmpScm/TadoLocal)** service. 
@@ -22,6 +11,7 @@ This HACS integration is the "client" part of a local-control setup. It connects
 - **Local-Only**: No traffic sent to Tado's cloud servers for heating commands.
 - **Bypass Rate Limits**: Avoid the daily request quotas recently introduced for Tado Cloud users.
 - **Improved Latency**: Commands are sent directly over your LAN.
+- **Real-time Updates**: Uses Server-Sent Events (SSE) for instant state updates without polling.
 
 ## Prerequisites
 Before installing this integration, you must have the **TadoLocal API service** up and running. 
@@ -30,9 +20,10 @@ Before installing this integration, you must have the **TadoLocal API service** 
 
 ## Features
 - **Automatic Discovery**: Automatically adds Climate entities for every Tado Zone found on the bridge.
-- **Real-time Status**: Fetches current temperature, humidity, and target setpoints.
-- **Full Control**: Support for setting Target Temperature and switching between `Heat` and `Off` modes.
-
+- **Real-time Updates**: Uses Server-Sent Events (SSE) from the `/events` endpoint for instant state updates. Changes to temperature, mode, and heating status are reflected immediately in Home Assistant without polling delays.
+- **Local Push Updates**: Configured as `local_push` integration type - Home Assistant processes events as they arrive from the server.
+- **Full Control**: Support for setting Target Temperature and switching between `Heat`, `Off`, and `Auto` modes.
+- `Auto` : When this HVAC mode is selected, it will set the temperature to `-1`. Which will follow the Tado's schedule (auto)
 ## Installation
 
 ### 1. HACS (Custom Repository)
@@ -52,7 +43,29 @@ Before installing this integration, you must have the **TadoLocal API service** 
 3. Enter the details from your AmpScm/TadoLocal instance:
    - **URL**: e.g., `http://192.168.1.50`
    - **Port**: e.g., `8000`
-   - **Token**: Your API Bearer Token.
+   - **Token**: _anything_
+
+## How It Works
+
+### Real-time Updates via SSE
+The integration connects to the `/events` endpoint using Server-Sent Events (SSE) to receive real-time updates:
+- **Zone State Changes**: Temperature, humidity, target temperature, mode, and heating status updates
+- **Device State Changes**: Individual device updates that map to their respective zones
+- **Automatic Reconnection**: If the SSE connection drops, it automatically reconnects with exponential backoff
+- **Fallback Polling**: If SSE fails, the integration falls back to polling every 5 minutes
+
+### Entity Updates
+When state changes occur on the TadoLocal server:
+1. The server sends an SSE event
+2. The coordinator processes the event immediately
+3. Entity states are updated in Home Assistant via `local_push`
+4. No polling delay - updates appear instantly
+
+## Technical Details
+- **Integration Type**: `local_push` - processes events as they arrive
+- **Update Method**: Primary: Server-Sent Events (SSE), Fallback: HTTP polling
+- **Entity Prefix**: All climate entities are named with `local_` prefix
+- **Supported Modes**: `off`, `heat`, `auto` (resume schedule)
 
 ---
 *Disclaimer: This project is a community-driven integration and is not affiliated with Tado GmbH.*
