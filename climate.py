@@ -24,7 +24,8 @@ class TadoZoneThermostat(CoordinatorEntity, ClimateEntity):
         self.coordinator = coordinator
         # Based on openapi.json, we use thermostat_id and name
         self._id = zone.get("thermostat_id") or zone.get("zone_id")
-        self._attr_name = zone.get("name") or zone.get("zone_name")
+        zone_name = zone.get("name") or zone.get("zone_name")
+        self._attr_name = f"local_{zone_name}" if zone_name else "local_Unknown"
         self._attr_unique_id = f"tado_local_therm_{self._id}"
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT, HVACMode.AUTO]
@@ -115,7 +116,7 @@ class TadoZoneThermostat(CoordinatorEntity, ClimateEntity):
             url, 
             headers={"Authorization": f"Bearer {self.coordinator.token}"}
         ) as resp:
-            if resp.status != 100:
+            if resp.status != 200:
                 _LOGGER.error("Failed to set temperature: %s", resp.status)
             else:
                 await asyncio.sleep(1)
