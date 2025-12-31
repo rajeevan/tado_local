@@ -25,7 +25,7 @@ class TadoZoneThermostat(CoordinatorEntity, ClimateEntity):
         # Based on openapi.json, we use thermostat_id and name
         self._id = zone.get("thermostat_id") or zone.get("zone_id")
         zone_name = zone.get("name") or zone.get("zone_name")
-        self._attr_name = f"local_{zone_name}" if zone_name else "local_Unknown"
+        self._attr_name = zone_name if zone_name else "Unknown"
         self._attr_unique_id = f"tado_local_therm_{self._id}"
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT, HVACMode.AUTO]
