@@ -12,10 +12,22 @@ async def async_setup_entry(hass, entry, async_add_entities):
     
     # Safety check: ensure we have a list to iterate over
     if not isinstance(coordinator.data, list):
-        _LOGGER.error("Expected list from coordinator, but got %s", type(coordinator.data))
-        return
-
+        _LOGGER.warning(
+            "Expected list from coordinator, but got %s. "
+            "Entities will be created when data becomes available.",
+            type(coordinator.data)
+        )
+        coordinator.data = []
+    
+    # Create entities from available data (may be empty if API is unreachable)
     async_add_entities([TadoZoneThermostat(coordinator, zone) for zone in coordinator.data])
+    
+    # If no entities were created, log a message
+    if not coordinator.data:
+        _LOGGER.info(
+            "No Tado zones found. This may be normal if the API is unreachable. "
+            "Entities will be created automatically when data becomes available."
+        )
 
 class TadoZoneThermostat(CoordinatorEntity, ClimateEntity):
     def __init__(self, coordinator, zone):

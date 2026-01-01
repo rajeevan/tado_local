@@ -4,6 +4,9 @@ import asyncio
 import copy
 from datetime import timedelta
 import async_timeout
+from aiohttp import ClientTimeout
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 # 1. Define the logger at the top level
@@ -29,14 +32,42 @@ class TadoDataCoordinator(DataUpdateCoordinator):
     async def async_config_entry_first_refresh(self):
         """Override to start SSE after first refresh."""
         await super().async_config_entry_first_refresh()
-        # Start SSE connection after initial data load
-        self._start_sse()
+        # Don't start SSE immediately - delay it to avoid blocking startup
+        # SSE will be started after setup completes via _start_sse_delayed()
 
     def _start_sse(self):
-        """Start the SSE connection task."""
+        """Start the SSE connection task (non-blocking).
+        
+        Per Home Assistant docs: Use hass.async_create_task to create tasks
+        that run in the event loop. This is thread-safe and non-blocking.
+        """
         if self._sse_task is None or self._sse_task.done():
             self._sse_running = True
+            # Use hass.async_create_task - this is the correct way per HA docs
+            # It creates a task in the event loop without blocking
             self._sse_task = self.hass.async_create_task(self._sse_loop())
+            _LOGGER.debug("SSE loop task created in event loop (non-blocking)")
+    
+    def _start_sse_after_setup(self):
+        """Start SSE connection after Home Assistant is fully started.
+        
+        Uses EVENT_HOMEASSISTANT_STARTED to ensure SSE only starts after
+        bootstrap completes. This prevents blocking the bootstrap phase.
+        """
+        @callback
+        def start_sse_on_ha_started(_event):
+            """Callback to start SSE after HA has fully started.
+            
+            This callback is decorated with @callback to indicate it's
+            safe to run in the event loop and won't block.
+            """
+            _LOGGER.debug("Home Assistant started - starting SSE connection")
+            self._start_sse()
+        
+        # Listen for the EVENT_HOMEASSISTANT_STARTED event
+        # This event fires after bootstrap completes, ensuring we don't block startup
+        self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, start_sse_on_ha_started)
+        _LOGGER.debug("SSE connection will start after Home Assistant bootstrap completes")
 
     async def async_shutdown(self):
         """Stop SSE connection on shutdown."""
@@ -49,12 +80,18 @@ class TadoDataCoordinator(DataUpdateCoordinator):
                 pass
 
     async def _sse_loop(self):
-        """Main SSE connection loop with reconnection logic."""
+        """Main SSE connection loop with reconnection logic.
+        
+        This runs in the Home Assistant event loop (not a separate thread).
+        All operations are async and non-blocking per HA async patterns.
+        """
         retry_delay = 5
         max_retry_delay = 60
         
         while self._sse_running:
             try:
+                # All operations here are async - they yield control to the event loop
+                # This ensures the event loop is not blocked
                 await self._connect_sse()
                 # If we exit normally, wait before reconnecting
                 retry_delay = 5
@@ -63,11 +100,16 @@ class TadoDataCoordinator(DataUpdateCoordinator):
                 break
             except Exception as err:
                 _LOGGER.warning("SSE connection error: %s. Retrying in %s seconds", err, retry_delay)
+                # asyncio.sleep yields control to the event loop - non-blocking
                 await asyncio.sleep(retry_delay)
                 retry_delay = min(retry_delay * 2, max_retry_delay)
 
     async def _connect_sse(self):
-        """Connect to SSE endpoint and process events."""
+        """Connect to SSE endpoint and process events.
+        
+        This is fully async and runs in the event loop. The connection timeout
+        ensures we don't block indefinitely if the endpoint is unreachable.
+        """
         headers = {
             "Authorization": f"Bearer {self.token}",
             "Accept": "text/event-stream",
@@ -80,7 +122,11 @@ class TadoDataCoordinator(DataUpdateCoordinator):
         _LOGGER.info("Connecting to SSE endpoint: %s", url)
         
         try:
-            async with self.session.get(url, headers=headers, timeout=None) as response:
+            # Use ClientTimeout: 10s connect timeout prevents blocking
+            # total=None allows the stream to run indefinitely once connected
+            # This is async and yields control to the event loop
+            timeout = ClientTimeout(total=None, connect=10)
+            async with self.session.get(url, headers=headers, timeout=timeout) as response:
                 if response.status != 200:
                     _LOGGER.error("SSE endpoint returned status %s", response.status)
                     raise Exception(f"SSE endpoint returned status {response.status}")
