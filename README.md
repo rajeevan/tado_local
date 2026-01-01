@@ -23,7 +23,7 @@ Before installing this integration, you must have the **TadoLocal API service** 
 - **Real-time Updates**: Uses Server-Sent Events (SSE) from the `/events` endpoint for instant state updates. Changes to temperature, mode, and heating status are reflected immediately in Home Assistant without polling delays.
 - **Local Push Updates**: Configured as `local_push` integration type - Home Assistant processes events as they arrive from the server.
 - **Full Control**: Support for setting Target Temperature and switching between `Heat`, `Off`, and `Auto` modes.
-- `Auto` : When this HVAC mode is selected, it will set the temperature to `-1`. Which will follow the Tado's schedule (auto)
+- `Auto` : When this HVAC mode is selected, it will set the temperature to `-1`. Which will set temperature to last set temperature... *Tado official cloud will see this as manual change!*
 ## Installation
 
 ### 1. HACS (Custom Repository)
