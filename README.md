@@ -64,7 +64,6 @@ When state changes occur on the TadoLocal server:
 ## Technical Details
 - **Integration Type**: `local_push` - processes events as they arrive
 - **Update Method**: Primary: Server-Sent Events (SSE), Fallback: HTTP polling
-- **Entity Prefix**: All climate entities are named with `local_` prefix
 - **Supported Modes**: `off`, `heat`, `auto` (resume schedule)
 
 ---
