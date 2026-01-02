@@ -71,13 +71,14 @@ class TadoZoneThermostat(CoordinatorEntity, ClimateEntity):
             return HVACMode.OFF
         
         state = self.data.get("state", {})
-        # AmpScm/TadoLocal reports cur_heating 0/1
-        heat_request = state.get("cur_heating", 0) > 0
         mode = state.get("mode", 0)
 
-        # if not heat_request and mode == 1:
-        #     return HVACMode.HEAT
-        return HVACMode.HEAT if mode == 1 else HVACMode.OFF
+        if mode == 3:
+            return HVACMode.AUTO
+        elif mode == 1:
+            return HVACMode.HEAT
+        else:
+            return HVACMode.OFF
 
     @property
     def hvac_action(self):
@@ -100,7 +101,7 @@ class TadoZoneThermostat(CoordinatorEntity, ClimateEntity):
         
         if hvac_mode == HVACMode.AUTO:
             # Special command for AmpScm/TadoLocal to resume Tado schedule
-            url = f"{self.coordinator.base_url}/zones/{zone_id}/set?temperature=-1&heating_enabled=true"
+            url = f"{self.coordinator.base_url}/zones/{zone_id}/set?heating_enabled=true&mode=auto"
         elif hvac_mode == HVACMode.HEAT:
             url = f"{self.coordinator.base_url}/zones/{zone_id}/set?heating_enabled=true"
         else: # HVACMode.OFF
