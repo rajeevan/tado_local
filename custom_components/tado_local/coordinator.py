@@ -197,11 +197,10 @@ class TadoDataCoordinator(DataUpdateCoordinator):
             # Find and update the zone in our data
             updated = False
             for i, zone in enumerate(current_data):
-                if zone.get("zone_id") == zone_id or zone.get("thermostat_id") == zone_id:
+                if zone.get("zone_id") == zone_id:
                     # Update the zone data
                     current_data[i] = {
                         "zone_id": zone_id,
-                        "thermostat_id": zone_id,  # For compatibility
                         "name": zone_name or zone.get("name"),
                         "zone_name": zone_name or zone.get("zone_name"),
                         "state": state
@@ -213,7 +212,6 @@ class TadoDataCoordinator(DataUpdateCoordinator):
                 # Zone not found, add it
                 current_data.append({
                     "zone_id": zone_id,
-                    "thermostat_id": zone_id,
                     "name": zone_name,
                     "zone_name": zone_name,
                     "state": state
@@ -249,9 +247,9 @@ class TadoDataCoordinator(DataUpdateCoordinator):
                     
                     data = await response.json()
                     
-                    # Fix: If API returns {"zones": [...]}, extract the list
+                    # If API returns {"zones": [...]}, extract the list
                     if isinstance(data, dict):
-                        return data.get("zones") or data.get("thermostats") or []
+                        return data.get("zones") or []
                     
                     return data if isinstance(data, list) else []
         except Exception as err:

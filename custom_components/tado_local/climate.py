@@ -34,11 +34,11 @@ class TadoZoneThermostat(CoordinatorEntity, ClimateEntity):
         """Pass the coordinator to the parent class."""
         super().__init__(coordinator)  # This is the "Listener"
         self.coordinator = coordinator
-        # Based on openapi.json, we use thermostat_id and name
-        self._id = zone.get("thermostat_id") or zone.get("zone_id")
+        # Based on openapi.json, we use zone_id and name
+        self._id = zone.get("zone_id")
         zone_name = zone.get("name") or zone.get("zone_name")
         self._attr_name = zone_name if zone_name else "Unknown"
-        self._attr_unique_id = f"tado_local_therm_{self._id}"
+        self._attr_unique_id = f"tado_local_zone_{self._id}"
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT, HVACMode.AUTO]
         self._attr_supported_features = (
@@ -49,10 +49,10 @@ class TadoZoneThermostat(CoordinatorEntity, ClimateEntity):
 
     @property
     def data(self):
-        # Safely find the current device data in the coordinator
+        # Safely find the current zone data in the coordinator
         if not self.coordinator.data:
             return None
-        return next((z for z in self.coordinator.data if (z.get("thermostat_id") == self._id or z.get("zone_id") == self._id)), None)
+        return next((z for z in self.coordinator.data if z.get("zone_id") == self._id), None)
 
     @property
     def current_temperature(self):
